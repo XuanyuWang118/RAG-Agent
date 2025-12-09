@@ -25,7 +25,14 @@ class RAGAgent:
         """
         TODO: 实现并调整系统提示词，使其符合课程助教的角色和回答策略
         """
-        self.system_prompt = """你是这门课程的助教..."""
+        self.system_prompt = """你是一位友好、严谨且专业的智能课程助教。
+        你的任务是根据提供的【课程内容】来回答学生的问题。
+        回答要求：
+        1. **基于事实**：所有回答必须严格基于【课程内容】中检索到的信息。
+        2. **追溯来源**：在回答的开头或末尾，必须清晰标注信息来源，格式为：[来源：文件名，页码 X 或 幻灯片 X] 或 [来源：文件名]（若无页码）。如果有多个来源，请合并或分别标注。
+        3. **无法回答**：如果【课程内容】中找不到足够的信息来回答学生的问题，请礼貌地告知学生：“我无法根据当前课程材料回答这个问题，请参考相关教材或联系老师。”
+        4. **语气专业**：保持助教的专业、友好和条理清晰的语气。
+        """
 
     def retrieve_context(
         self, query: str, top_k: int = TOP_K
@@ -38,7 +45,40 @@ class RAGAgent:
         3. 每个检索结果需要包含来源信息（文件名和页码）
         4. 返回格式化的上下文字符串和原始检索结果列表
         """
-        pass
+        # 1. 使用向量数据库检索相关文档
+        retrieved_docs = self.vector_store.search(query, top_k=top_k)
+        
+        # 2. 格式化检索结果，构建上下文字符串
+        context_parts = []
+        
+        # 使用集合去重，避免重复引用相同的来源
+        source_set = set()
+        
+        for doc in retrieved_docs:
+            content = doc["content"]
+            metadata = doc["metadata"]
+            
+            filename = metadata.get("filename", "未知文件")
+            page_number = metadata.get("page_number", 0)
+            
+            # 3. 每个检索结果需要包含来源信息（文件名和页码）
+            if page_number and page_number > 0:
+                # 判断是页码 (PDF) 还是幻灯片 (PPTX)
+                source_label = "页码" if metadata.get("filetype") == ".pdf" else "幻灯片"
+                source_info = f"[来源：{filename}, {source_label} {page_number}]"
+                source_set.add(f"{filename}, {source_label} {page_number}")
+            else:
+                # DOCX/TXT 或没有页码/幻灯片信息的文档
+                source_info = f"[来源：{filename}]"
+                source_set.add(filename)
+                
+            # 将来源信息放在内容上方，用于 LLM 区分
+            context_parts.append(f"{source_info}\n{content}\n---")
+
+        context_string = "\n".join(context_parts)
+        
+        # 4. 返回格式化的上下文字符串和原始检索结果列表
+        return context_string, retrieved_docs
 
     def generate_response(
         self,
@@ -66,7 +106,15 @@ class RAGAgent:
         3. 包含来源信息（文件名和页码）
         4. 返回用户提示词
         """
-        user_text = """"""
+        user_text = f"""
+        请基于下面的【课程内容】来回答学生的问题。请严格遵循系统提示词中的所有要求。
+
+        【课程内容】
+        {context}
+
+        【学生问题】
+        {query}
+        """
 
         messages.append({"role": "user", "content": user_text})
         
