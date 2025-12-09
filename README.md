@@ -1,6 +1,6 @@
 # RAG-Agent
 
-NLP Course Project
+NLP Course Project [Info](https://gpy5q03kes.feishu.cn/wiki/JgqTwaqG2ih6hdkWk6pcYBhAnPd)
 
 Members: XuanyuWang, RuiTao, BoruiZhang
 
