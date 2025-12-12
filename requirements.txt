@@ -13,4 +13,4 @@ pandas>=1.5.3
 tqdm>=4.65.0
 pillow>=9.0.0
 pytesseract>=0.3.10
-
+pdfplumber>=0.11.8
