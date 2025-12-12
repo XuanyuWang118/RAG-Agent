@@ -15,4 +15,5 @@ pillow>=9.0.0
 pytesseract>=0.3.10
 requests>=2.31.0
 tavily-python>=0.7.0
-
+pdfplumber>=0.11.8
+streamlit>=1.28.0

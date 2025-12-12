@@ -1,11 +1,15 @@
+import re
 from typing import List, Dict
 from tqdm import tqdm
-
+from image_processor import ImageProcessor 
 
 class TextSplitter:
     def __init__(self, chunk_size: int, chunk_overlap: int):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+
+        # 初始化图像处理器
+        self.image_processor = ImageProcessor() 
 
         self.separators = [
             "\n\n",  # 两个换行符（段落）
@@ -53,7 +57,11 @@ class TextSplitter:
             
             for sep in self.separators[:-1]: # 排除最后的 "" 分隔符
                 # 使用正则表达式查找分隔符
-                match_iter = re.finditer(sep, text[search_start:end_index])
+                try:
+                    match_iter = re.finditer(sep, text[search_start:end_index])
+                except Exception:
+                    # 如果正则表达式解析失败（例如遇到转义问题），跳过
+                    continue
                 
                 # 找到最靠后的一个分隔符，确保 chunk size 接近目标
                 last_match = None
@@ -87,30 +95,54 @@ class TextSplitter:
 
         return chunks
 
-    def split_documents(self, documents: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """切分多个文档。
-        对于PDF和PPT，已经按页/幻灯片分割，不再进行二次切分
-        对于DOCX和TXT，进行文本切分
-        """
+    def split_documents(self, documents: List[Dict[str, any]]) -> List[Dict[str, any]]:
+        """切分多个文档，并对 PDF/PPTX 中的图片进行文本化处理。"""
         chunks_with_metadata = []
 
-        for doc in tqdm(documents, desc="处理文档", unit="文档"):
+        # 新增一个进度条，用于处理图片（这可能是最耗时的部分）
+        processed_docs = []
+        for doc in tqdm(documents, desc="图像和文本预处理", unit="文档"):
+            filetype = doc.get("filetype", "")
+            
+            # --- 多模态 RAG 升级核心逻辑 ---
+            if filetype in [".pdf", ".pptx"] and doc.get("images"):
+                original_content = doc.get("content", "")
+                image_paths = [img['path'] for img in doc['images']]
+                
+                # 调用图像处理器，将图片路径列表转换为描述文本
+                # 图像处理器会返回一个描述所有图片的单个长字符串
+                image_text = self.image_processor.process_images_to_text(image_paths)
+                
+                if image_text:
+                    # 将图片描述文本追加到原始内容中，使用清晰的分隔符
+                    new_content = f"{original_content}\n\n--- 图像内容分析 ---\n{image_text}"
+                    doc["content"] = new_content
+            
+            processed_docs.append(doc)
+        
+        # --------------------------------
+
+        for doc in tqdm(processed_docs, desc="文档切分", unit="文档块"):
             content = doc.get("content", "")
             filetype = doc.get("filetype", "")
-
+            
+            # PDF 和 PPTX 已经包含了文本化的图片信息，且我们仍然按页/幻灯片切分
             if filetype in [".pdf", ".pptx"]:
+                # PDF/PPTX 的 content 可能包含了图片分析文本
                 chunk_data = {
-                    "content": content,
+                    "content": content, 
                     "filename": doc.get("filename", "unknown"),
                     "filepath": doc.get("filepath", ""),
                     "filetype": filetype,
                     "page_number": doc.get("page_number", 0),
                     "chunk_id": 0,
-                    "images": doc.get("images", []),
+                    # 注意：此时的 images 字段仍然保留，但内容已体现在 content 中
+                    "images": doc.get("images", []), 
                 }
                 chunks_with_metadata.append(chunk_data)
 
             elif filetype in [".docx", ".txt"]:
+                # DOCX/TXT 进行二次文本切分
                 chunks = self.split_text(content)
                 for i, chunk in enumerate(chunks):
                     chunk_data = {
@@ -120,7 +152,7 @@ class TextSplitter:
                         "filetype": filetype,
                         "page_number": 0,
                         "chunk_id": i,
-                        "images": [],
+                        "images": [], # DOCX/TXT 暂无图片处理
                     }
                     chunks_with_metadata.append(chunk_data)
 
