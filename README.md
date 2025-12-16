@@ -2,9 +2,20 @@
 
 NLP Course Project [Info](https://gpy5q03kes.feishu.cn/wiki/JgqTwaqG2ih6hdkWk6pcYBhAnPd)
 
-Members: XuanyuWang, RuiTao, BoruiZhang
+**Members**: XuanyuWang, RuiTao, BoruiZhang
 
 ### Git usage
+#### 初始化本地 git 仓库
+```bash
+git init
+git remote add origin git@github.com:user-name/hub-name.git  
+git remote -v
+git status
+git add .
+git commit -m "init"
+git push -u origin master
+```
+#### 基础提交指令
 ```bash
 git pull                # 拉取仓库
 git status              # 查看修改状态
@@ -12,9 +23,17 @@ git add .               # 把修改加入暂存区
 git commit -m "message" # 提交到 github 仓库
 git push                # 上传
 ```
+#### 分支指令
+```bash
+git branch <-r>
+git switch <branch-name>
+git checkout <branch-name> -- <file-name> <...>
+git stash <-u>
+git stash pop
+```
 
-### Data
-NLP Course PPts
+### Datasets
+NLP Course PPts, ...
 
 
 ### Chat Examples
@@ -22,23 +41,53 @@ NLP Course PPts
 ./chat.md
 ```
 
-### 🖼️ Image Recognition
+### 🖼️ 图像识别
 
-This project now supports multimodal document processing, enabling the extraction and handling of image information.
+本项目现已支持**多模态文档处理**，可对文档中的图像信息进行提取、理解与融合。
 
-1.  **Enhanced PDF Extraction (`document_loader.py`)**:
-    * The original PDF parser has been replaced with **PyMuPDF (fitz)**, which significantly improves the success rate and accuracy of text and image extraction.
-    * Images from PDF and PPTX files are now extracted and saved to the `./images_extracted/` directory.
+1. **增强的 PDF/PPDX 解析（`document_loader.py`）**：
+   * 原有的 PDF 解析器已替换为 **PyMuPDF（fitz）**，显著提升了文本与图像提取的成功率和准确性。
+   * 支持从 PDF 与 PPTX 文件中提取图像，并统一保存至 `./images_extracted/` 目录中。
 
-2.  **Image Textualization (`text_splitter.py`)**:
-    * A new image preprocessing step has been added before the document chunking process.
-    * The `TextSplitter` calls the **`ImageProcessor`** (implemented in `image_processor.py`) to convert extracted images from each page/slide into descriptive text.
-    * This image description text is **appended** to the original document text content, ensuring that RAG retrieval considers visual information alongside the text. 
+2. **图像文本化（`text_splitter.py`）**：
+   * 在文档切分（chunking）流程之前，新增了图像预处理步骤。
+   * `TextSplitter` 会调用 **`ImageProcessor`**（定义于 `image_processor.py`），将每一页 / 每一张幻灯片中提取的图像转换为描述性文本。
+   * 生成的图像描述文本将被**追加**到原始文档文本内容中，使 RAG 检索在文本之外同时感知并利用视觉信息。
 
 
 ### 🌐 联网查询功能
 
 一个简单的toolcalling架构，利用tavily的联网查询功能。稍微修改了一下提示词来使用tool。
+
+
+### 🔍 检索系统升级：混合检索与多轮增强
+
+本次升级将原有的纯向量搜索（密集检索）架构，提升为智能混合检索（Hybrid Retrieval）系统，以应对复杂、多轮次以及包含专业术语的查询。
+
+#### 1. 复合检索策略：弥补纯向量搜索的不足
+
+我们集成了稀疏检索 BM25 和 Reciprocal Rank Fusion（RRF）算法，实现了精准与语义的平衡：
+
+* **密集检索（Dense Retrieval）：** 利用 ChromaDB 向量搜索，擅长理解抽象概念、定义和原理，处理**语义相关**的查询。
+* **稀疏检索（BM25 Retrieval）：** 基于关键词的匹配，擅长处理包含罕见、专业、技术性名词或 ID 等的**字面匹配**查询。
+* **混合检索（Hybrid Retrieval）：** **核心策略**。同时执行两种检索，并使用 RRF 算法智能融合并重新排序结果，确保兼顾语义和关键词的最佳准确性。
+
+> **持久化优化：** 我们解决了 BM25 索引需要重建的性能问题，通过序列化工具（如 `joblib`）将其持久化到磁盘，确保系统启动时能够快速加载索引。
+
+
+#### 2. LLM 驱动的智能策略分派与决策
+
+为了最大限度发挥复合检索的效能，我们让 LLM 动态选择最高效的检索策略：
+
+* **策略分析：** 在执行检索前，系统调用 LLM（`_analyze_query_type`）分析用户的查询意图（概念主导、关键词主导或混合），并智能决策是采用纯 **DENSE**、纯 **BM25** 还是 **HYBRID** 策略。
+* **动态分派：** 系统根据 LLM 的决策结果，自动分派到 `VectorStore` 中对应的搜索方法，避免了单一策略的局限性。
+
+#### 3. 多轮对话检索增强（指代消解）
+
+针对多轮对话场景中常见的上下文指代问题，我们实现了 LLM 驱动的查询重写：
+
+* **指代消解：** `RAGAgent`（在 `_construct_search_query` 中）将当前查询和最近的对话历史发送给 LLM。
+* **查询提炼：** LLM 将模糊查询（如“它有什么缺点？”）提炼成一个**精确且独立**的、无指代关系的检索查询（如“Transformer 模型的缺点”），从根本上解决了多轮问答中的检索漂移问题，极大地提升了用户体验。
 
 
 ### 🚀 Streamlit 可视化界面

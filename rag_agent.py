@@ -63,10 +63,30 @@ class RAGAgent:
         4. **语气专业**：保持助教的专业、友好和条理清晰的语气。
         """
 
+    # def _construct_search_query(self, current_query: str, chat_history: Optional[List[Dict]] = None) -> str:
+    #     """
+    #     【新增】使用对话历史来提炼搜索关键词，提升多轮检索精度。
+    #     仅在 self.enable_advanced_rag 开启时，才执行多轮增强。
+    #     """
+    #     if not self.enable_advanced_rag:
+    #         return current_query
+            
+    #     # 排除包含图片描述的增强查询，避免重复嵌套
+    #     if current_query.startswith("【用户提交的图片分析结果】"):
+    #          return current_query
+
+    #     if not chat_history or len(chat_history) < 2:
+    #         return current_query
+        
+    #     # 提取最近的问答对
+    #     last_exchange = chat_history[-2:]
+        
+    #     # 构造用于 RAG 检索的最终查询
+    #     recent_context = f"最近的问题：{last_exchange[0]['content']}，最近的回答：{last_exchange[1]['content']}。"
+    #     return f"{recent_context} 学生的新问题是：{current_query}"
     def _construct_search_query(self, current_query: str, chat_history: Optional[List[Dict]] = None) -> str:
         """
-        【新增】使用对话历史来提炼搜索关键词，提升多轮检索精度。
-        仅在 self.enable_advanced_rag 开启时，才执行多轮增强。
+        【修正】使用对话历史来提炼搜索关键词，提升多轮检索精度。
         """
         if not self.enable_advanced_rag:
             return current_query
@@ -75,15 +95,61 @@ class RAGAgent:
         if current_query.startswith("【用户提交的图片分析结果】"):
              return current_query
 
+        # 检查是否有足够的历史记录
         if not chat_history or len(chat_history) < 2:
             return current_query
         
         # 提取最近的问答对
-        last_exchange = chat_history[-2:]
+        # 遍历历史记录，找到最新的 User 和 Assistant 消息
+        relevant_history = []
+        for msg in reversed(chat_history):
+            # 仅考虑 user 和 assistant 角色
+            if msg.get('role') in ['user', 'assistant'] and 'content' in msg:
+                # 排除工具调用相关的 assistant 消息
+                if msg.get('role') == 'assistant' and msg.get('content', '').startswith("🎯 已生成习题"):
+                     continue
+                
+                relevant_history.append(msg)
+            if len(relevant_history) >= 2:
+                break
         
-        # 构造用于 RAG 检索的最终查询
-        recent_context = f"最近的问题：{last_exchange[0]['content']}，最近的回答：{last_exchange[1]['content']}。"
-        return f"{recent_context} 学生的新问题是：{current_query}"
+        # 如果找不到最新的问答对，则返回原始查询
+        if len(relevant_history) < 2:
+            return current_query
+        
+        # 格式化上下文
+        # relevant_history[0] 是最新的消息
+        # 确保顺序是 [最新回复 (Assistant), 最新提问 (User)]
+        
+        # LLM 提炼 Prompt
+        context_for_llm = f"""
+        你是一个查询提炼助手。请根据以下对话历史来完善用户的最新查询，以更好地进行RAG检索。
+        
+        对话历史:
+        - 上一次回复（助教）："{relevant_history[0]['content']}"
+        - 上一次提问（学生）："{relevant_history[1]['content']}"
+        - 用户的最新提问是："{current_query}"
+
+        任务：请提取或重写一个**精确且独立**的检索查询（用于搜索知识库），该查询应结合对话历史中的指代关系或省略信息。
+        例如，如果最新提问是"它有什么缺点?"，而上一次提问是"什么是Transformer模型"，那么你应返回"Transformer模型的缺点"。
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": context_for_llm}],
+                temperature=0.0, # 确保输出稳定
+                max_tokens=200
+            )
+            enhanced_query = response.choices[0].message.content.strip()
+            # 排除引号，防止 JSON 解析问题
+            enhanced_query = enhanced_query.strip().replace('"', '') 
+            
+            print(f"🔄 多轮对话增强查询: {enhanced_query}")
+            return enhanced_query
+        except Exception as e:
+            print(f"❌ 多轮查询增强失败 ({e})，使用原始查询。")
+            return current_query
 
     def _analyze_query_type(self, query: str) -> str:
         """

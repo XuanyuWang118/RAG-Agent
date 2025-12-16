@@ -1,4 +1,7 @@
 import os
+import joblib
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from tqdm import tqdm
 
@@ -19,6 +22,7 @@ from config import (
     RRF_K,
 )
 
+BM25_INDEX_PATH = os.path.join(VECTOR_DB_PATH, "bm25_index.joblib")
 
 class VectorStore:
 
@@ -50,6 +54,19 @@ class VectorStore:
         # BM25 检索器需要所有文档才能初始化，这里先初始化为 None。
         self.bm25_retriever: Optional[BM25Retriever] = None
 
+        # 【启动时尝试加载 BM25 索引】
+        if os.path.exists(BM25_INDEX_PATH):
+            print("🚀 正在加载已存在的 BM25 稀疏检索器...")
+            try:
+                # 尝试从磁盘加载索引
+                self.bm25_retriever = joblib.load(BM25_INDEX_PATH)
+                print("✅ BM25 检索器加载完成。")
+            except Exception as e:
+                print(f"❌ BM25 索引加载失败: {e}")
+                self.bm25_retriever = None
+        else:
+            print("⚠️ BM25 稀疏检索器文件不存在，需通过 add_documents 初始化。")
+
 
     def get_embedding(self, text: str) -> List[float]:
         """获取文本的向量表示
@@ -72,7 +89,7 @@ class VectorStore:
     def _initialize_bm25_retriever(self, lc_documents: List[Document]) -> None:
         """
         【优化 2：新增 BM25 初始化方法】
-        私有方法：使用所有 LangChain Document 对象初始化 BM25 稀疏检索器。
+        私有方法：使用所有 LangChain Document 对象初始化 BM25 稀疏检索器，并持久化到磁盘。
         """
         if not lc_documents:
              print("⚠️ 无法初始化 BM25 检索器：没有文档。")
@@ -83,6 +100,13 @@ class VectorStore:
         self.bm25_retriever = BM25Retriever.from_documents(lc_documents)
         self.bm25_retriever.k = TOP_K 
         print("✅ BM25 检索器初始化完成。")
+
+        # 【将 BM25 检索器持久化到磁盘】
+        try:
+            joblib.dump(self.bm25_retriever, BM25_INDEX_PATH)
+            print(f"💾 BM25 检索器已成功保存到 {BM25_INDEX_PATH}")
+        except Exception as e:
+            print(f"❌ 警告：BM25 检索器持久化失败: {e}")
 
 
     def add_documents(self, chunks: List[Dict[str, Any]]) -> None:
@@ -170,6 +194,7 @@ class VectorStore:
             texts = [chunk['content'] for chunk in chunks]
             metadatas = []
             ids = []
+            new_lc_documents = [] # 新增：用于增量更新 BM25
 
             # 批量获取embeddings（复用现有的get_embedding方法）
             print(f"正在向量化 {len(texts)} 个新文档块...")
@@ -205,7 +230,25 @@ class VectorStore:
                 ids=ids
             )
 
-            print(f"✅ 增量添加成功：{len(ids)} 个文档块")
+            # 【增量更新 BM25 索引】
+            # 增量添加后需要重新构建整个 BM25 索引，以包含新文档
+            print("🔄 增量添加完成，正在重建 BM25 索引...")
+            
+            # 1. 从 ChromaDB 检索所有现有文档
+            all_chroma_docs = self.collection.get(
+                include=['documents', 'metadatas']
+            )
+            
+            # 2. 将所有文档转换为 LangChain Document 格式
+            all_lc_documents = [
+                Document(page_content=all_chroma_docs['documents'][i], metadata=all_chroma_docs['metadatas'][i])
+                for i in range(len(all_chroma_docs['documents']))
+            ]
+            
+            # 3. 使用所有文档重新初始化 BM25 检索器
+            self._initialize_bm25_retriever(all_lc_documents)
+            
+            print(f"✅ 增量添加成功：{len(ids)} 个文档块，BM25 索引已重建。")
             return True
 
         except Exception as e:
