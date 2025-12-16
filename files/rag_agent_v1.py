@@ -1,4 +1,3 @@
-import json
 from typing import List, Dict, Optional, Tuple
 
 from openai import OpenAI
@@ -10,7 +9,6 @@ from config import (
     TOP_K,
 )
 from vector_store import VectorStore
-from tools import tool_manager
 
 
 class RAGAgent:
@@ -29,16 +27,10 @@ class RAGAgent:
         """
         self.system_prompt = """你是一位友好、严谨且专业的智能课程助教。
         你的任务是根据提供的【课程内容】来回答学生的问题。
-
-        **回答策略（优先级顺序）：**
-        1. **优先使用课程内容**：首先基于【课程内容】中的信息回答问题
-        2. **补充联网搜索**：如果【课程内容】信息不足或没有相关内容，才使用联网搜索获取补充信息
-        3. **直接回答**：对于不涉及课程知识的一般性问题（如时间、简单计算），直接回答无需追溯来源
-
         回答要求：
-        1. **基于事实**：所有回答必须严格基于【课程内容】或者联网搜索中检索到的信息。
-        2. **追溯来源**：在回答中使用课程内容时，必须在开头或末尾标注信息来源，格式为：[来源：文件名，页码 X 或 幻灯片 X] 或 [来源：文件名]（若无页码）。如果使用了联网搜索，标注为：[来源：网络搜索结果]。如果有多个来源，请合并或分别标注。
-        3. **无法回答**：如果【课程内容】和联网搜索中都找不到足够的信息来回答学生的问题，请告知学生："我无法根据当前课程材料回答这个问题，请参考相关教材或联系老师。"
+        1. **基于事实**：所有回答必须严格基于【课程内容】中检索到的信息。
+        2. **追溯来源**：在回答的开头或末尾，必须清晰标注信息来源，格式为：[来源：文件名，页码 X 或 幻灯片 X] 或 [来源：文件名]（若无页码）。如果有多个来源，请合并或分别标注。
+        3. **无法回答**：如果【课程内容】中找不到足够的信息来回答学生的问题，请礼貌地告知学生：“我无法根据当前课程材料回答这个问题，请参考相关教材或联系老师。”
         4. **语气专业**：保持助教的专业、友好和条理清晰的语气。
         """
 
@@ -117,17 +109,11 @@ class RAGAgent:
         user_text = f"""
         请基于下面的【课程内容】来回答学生的问题。请严格遵循系统提示词中的所有要求。
 
-        **优先级策略：**
-        1. 首先基于【课程内容】回答问题
-        2. 只有在【课程内容】信息不足时，才使用工具获取补充信息
-
         【课程内容】
         {context}
 
         【学生问题】
         {query}
-
-        如果【课程内容】无法提供足够的信息，你可以选择使用提供的工具搜索网络信息、进行计算或获取当前时间。
         """
 
         messages.append({"role": "user", "content": user_text})
@@ -142,65 +128,12 @@ class RAGAgent:
 
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=tool_manager.get_tool_definitions(),
-                tool_choice="auto",  # 让AI自动决定是否调用工具
-                temperature=0.7,
-                max_tokens=1500
+                model=self.model, messages=messages, temperature=0.7, max_tokens=1500
             )
 
-            response_message = response.choices[0].message
-
-            # 检查是否有工具调用
-            if response_message.tool_calls:
-                # 执行工具调用
-                tool_results = self._execute_tool_calls(response_message.tool_calls)
-
-                # 将工具调用结果添加到消息历史
-                messages.append(response_message)
-                for tool_result in tool_results:
-                    messages.append(tool_result)
-
-                # 第二次调用：基于工具结果生成最终回答
-                final_response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=1500
-                )
-
-                return final_response.choices[0].message.content
-            else:
-                # 没有工具调用，直接返回结果
-                return response_message.content
-
+            return response.choices[0].message.content
         except Exception as e:
             return f"生成回答时出错: {str(e)}"
-
-    def _execute_tool_calls(self, tool_calls) -> List[Dict]:
-        """执行工具调用并返回结果"""
-        tool_results = []
-
-        for tool_call in tool_calls:
-            tool_name = tool_call.function.name
-            tool_args = json.loads(tool_call.function.arguments)
-
-            print(f"🔧 执行工具: {tool_name} 参数: {tool_args}")
-
-            # 执行工具
-            tool_result = tool_manager.execute_tool(tool_name, tool_args)
-
-            # 格式化工具结果消息
-            tool_result_message = {
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": tool_result
-            }
-
-            tool_results.append(tool_result_message)
-
-        return tool_results
 
     def answer_question(
         self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K

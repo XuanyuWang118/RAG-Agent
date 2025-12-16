@@ -1,0 +1,15 @@
+{
+  "id": "b42e7477-e4b1-4d2e-a5a1-eb3954b1dcf4",
+  "title": "你好",
+  "timestamp": "2025-12-16T18:40:18.567357",
+  "messages": [
+    {
+      "role": "user",
+      "content": "你好"
+    },
+    {
+      "role": "assistant",
+      "content": "你好！请问有什么问题我可以帮助你解答吗？"
+    }
+  ]
+}
