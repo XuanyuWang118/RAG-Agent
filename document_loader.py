@@ -23,61 +23,6 @@ class DocumentLoader:
         self.image_output_dir = image_output_dir
         os.makedirs(self.image_output_dir, exist_ok=True) # 确保图片输出目录存在
 
-    # def load_pdf(self, file_path: str) -> List[Dict]:
-    #     """加载PDF文件，按页返回内容
-
-    #     TODO: 实现PDF文件加载
-    #     要求：
-    #     1. 使用PdfReader读取PDF文件
-    #     2. 遍历每一页，提取文本内容
-    #     3. 格式化为"--- 第 X 页 ---\n文本内容\n"
-    #     4. 返回pdf内容列表，每个元素包含 {"text": "..."}
-    #     """
-    #     pages = []
-    #     try:
-    #         # 使用 pdfplumber 读取PDF文件
-    #         with pdfplumber.open(file_path) as pdf:
-    #             num_pages = len(pdf.pages)
-    #             filename_base = os.path.basename(file_path).replace(os.path.splitext(file_path)[1], "")
-                
-    #             for i, page in enumerate(pdf.pages):
-    #                 # 提取文本
-    #                 text = page.extract_text() or ""
-                    
-    #                 # 提取图片信息
-    #                 image_info = []
-    #                 for image_data in page.images:
-    #                     # 尝试从 page.images 中提取图像对象
-    #                     try:
-    #                         # get_objid() 是一个内部方法，这里我们直接尝试提取原始图像数据
-    #                         img = page.crop((image_data['x0'], image_data['y0'], image_data['x1'], image_data['y1']))
-                            
-    #                         # 获取图片二进制数据
-    #                         img_bytes = img.to_image().original.tobytes() 
-    #                         img_format = img.to_image().original.format 
-                            
-    #                         # 确定图片保存路径和文件名
-    #                         img_filename = f"{filename_base}_p{i+1}_{image_data['name']}.{img_format or 'png'}"
-    #                         img_save_path = os.path.join(self.image_output_dir, img_filename)
-                            
-    #                         # 使用PIL保存图片
-    #                         Image.open(io.BytesIO(img_bytes)).save(img_save_path)
-
-    #                         image_info.append({"path": img_save_path, "bbox": [image_data['x0'], image_data['y0']]})
-    #                     except Exception as img_e:
-    #                         # 很多 PDF 对象会被错误识别为图片，这里捕获异常并跳过
-    #                         continue
-
-    #                 formatted_text = f"--- 第 {i + 1} 页 ---\n{text.strip()}\n"
-                    
-    #                 pages.append({
-    #                     "text": formatted_text,
-    #                     "images": image_info  # 新增图片信息字段
-    #                 })
-    #     except Exception as e:
-    #         print(f"加载PDF文件失败 {file_path}: {e}")
-    #     return pages
-
     def load_pdf(self, file_path: str) -> List[Dict]:
         """
         加载PDF文件，按页返回内容，并使用 PyMuPDF 提取图片和保存到本地。
@@ -189,18 +134,24 @@ class DocumentLoader:
                     
                     # 提取图片内容
                     if shape.shape_type == 13: # 形状类型 13 代表 PICTURE
-                        image_part = shape.image
-                        image_bytes = image_part.blob
-                        image_ext = image_part.ext
-                        
-                        # 保存图片
-                        img_filename = f"{filename_base}_s{i+1}_{shape.name}.{image_ext}"
-                        img_save_path = os.path.join(self.image_output_dir, img_filename)
-                        
-                        with open(img_save_path, 'wb') as f:
-                            f.write(image_bytes)
-                        
-                        image_info.append({"path": img_save_path, "name": shape.name})
+                        try:
+                            # 检查形状是否真的包含图片
+                            if hasattr(shape, "image"):
+                                image_part = shape.image
+                                image_bytes = image_part.blob
+                                image_ext = image_part.ext
+
+                                # 保存图片
+                                img_filename = f"{filename_base}_s{i+1}_{shape.name}.{image_ext}"
+                                img_save_path = os.path.join(self.image_output_dir, img_filename)
+
+                                with open(img_save_path, 'wb') as f:
+                                    f.write(image_bytes)
+
+                                image_info.append({"path": img_save_path, "name": shape.name})
+                        except (AttributeError, Exception) as img_e:
+                            # 有些形状被误识别为图片，跳过这些错误
+                            continue
 
                 text = "\n".join(filter(None, slide_text)).strip()
                 formatted_text = f"--- 幻灯片 {i + 1} ---\n{text}\n"
@@ -326,3 +277,79 @@ class DocumentLoader:
                         documents.extend(doc_chunks)
 
         return documents
+
+    def process_uploaded_file(self, uploaded_file) -> List[Dict]:
+        """处理单个上传的文件（来自Streamlit），复用现有的load方法
+
+        参数:
+            uploaded_file: Streamlit上传的文件对象
+
+        返回:
+            处理后的文档块列表
+        """
+        try:
+            # 获取文件扩展名
+            file_name = uploaded_file.name
+            file_ext = os.path.splitext(file_name)[1].lower()
+
+            if file_ext not in self.supported_formats:
+                raise ValueError(f"不支持的文件格式: {file_ext}")
+
+            # 创建临时文件供现有方法使用
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_file_path = tmp_file.name
+
+            try:
+                # 复用现有的load方法
+                if file_ext == ".pdf":
+                    pages = self.load_pdf(tmp_file_path)
+                    # 转换格式以匹配期望的输出
+                    converted_pages = []
+                    for page in pages:
+                        converted_pages.append({
+                            "content": page["text"],
+                            "filename": file_name,
+                            "filepath": f"uploaded://{file_name}",
+                            "filetype": ".pdf",
+                            "page_number": page.get("page_number", 0),
+                            "images": page.get("images", [])
+                        })
+                    return converted_pages
+
+                elif file_ext == ".pptx":
+                    slides = self.load_pptx(tmp_file_path)
+                    # 转换格式
+                    converted_slides = []
+                    for slide in slides:
+                        converted_slides.append({
+                            "content": slide["text"],
+                            "filename": file_name,
+                            "filepath": f"uploaded://{file_name}",
+                            "filetype": ".pptx",
+                            "page_number": slide.get("page_number", 0),
+                            "images": slide.get("images", [])
+                        })
+                    return converted_slides
+
+                elif file_ext == ".docx":
+                    # DOCX文件直接返回文本内容
+                    text = self.load_docx(tmp_file_path)
+                    return [{"content": text, "filename": file_name, "filetype": file_ext, "page_number": 0}]
+
+                elif file_ext == ".txt":
+                    # TXT文件直接返回文本内容
+                    text = self.load_txt(tmp_file_path)
+                    return [{"content": text, "filename": file_name, "filetype": file_ext, "page_number": 0}]
+
+                else:
+                    raise ValueError(f"不支持的文件类型: {file_ext}")
+
+            finally:
+                # 清理临时文件
+                os.unlink(tmp_file_path)
+
+        except Exception as e:
+            print(f"处理上传文件失败 {uploaded_file.name}: {e}")
+            return []

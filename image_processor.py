@@ -81,3 +81,52 @@ class ImageProcessor:
                     full_description.append(f"图片 {i+1} 处理失败: {e}\n")
 
         return "\n".join(full_description)
+
+    def analyze_single_image(self, image_base64: str, image_name: str = "图片") -> str:
+        """
+        分析单张图片（Base64格式），返回文字描述。
+
+        参数:
+            image_base64: 图片的Base64编码
+            image_name: 图片名称（用于标识）
+
+        返回:
+            图片的文字描述
+        """
+        if not image_base64:
+            return ""
+
+        # 构建多模态输入内容
+        image_url = f"data:image/jpeg;base64,{image_base64}"
+
+        # 提示词要求模型进行详细分析
+        prompt_text = (
+            "请详细分析这张图片，并提供全面的文字描述。描述应包含："
+            "1. 图片的主要内容和主题"
+            "2. 图表、图形或示意图的具体含义"
+            "3. 文字内容（如果有的话）"
+            "4. 整体结构和布局特征"
+            "请用中文回答，描述要详细、客观、专业。"
+        )
+
+        content_parts = [
+            {"type": "text", "text": prompt_text},
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ]
+
+        messages = [{"role": "user", "content": content_parts}]
+
+        # 调用 Qwen-VL API
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,  # 低温度保证客观描述
+                max_tokens=1000
+            )
+
+            analysis_text = response.choices[0].message.content
+            return f"--- {image_name} 分析结果 ---\n{analysis_text}\n"
+
+        except Exception as e:
+            return f"{image_name} 处理失败: {e}\n"

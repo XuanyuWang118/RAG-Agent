@@ -1,0 +1,25 @@
+{
+  "id": "ed11273f-05db-409b-be68-ccb0b1e54dd8",
+  "title": "给出课程文档中Tomas提出的论文名称和相关作者",
+  "timestamp": "2025-12-17T00:17:53.105692",
+  "messages": [
+    {
+      "role": "user",
+      "content": "给出课程文档中Tomas提出的论文名称和相关作者",
+      "has_image": false
+    },
+    {
+      "role": "assistant",
+      "content": "根据课程文档内容，Tomas Mikolov 提出的与词向量相关的论文有以下两篇：\n\n1. **《Efficient Estimation of Word Representations in Vector Space》**  \n   - **作者**：Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean  \n   - **机构**：Google Inc., Mountain View, CA  \n   [来源：3.1 词向量 2025.pptx, 幻灯片 25]\n\n2. **《Distributed Representations of Words and Phrases and their Compositionality》**  \n   - **作者**：Tomas Mikolov, Ilya Sutskever, Kai Chen, Greg Corrado, Jeffrey Dean  \n   - **机构**：Google Inc., Mountain View  \n   [来源：3.1 词向量 2025.pptx, 幻灯片 25]\n\n这两篇论文均是词向量（特别是 Word2Vec 模型）领域的奠基性工作，由 Tomas Mikolov 及其在 Google 的同事共同完成。"
+    },
+    {
+      "role": "user",
+      "content": "他外貌特征是什么样子的？",
+      "has_image": false
+    },
+    {
+      "role": "assistant",
+      "content": "根据课程内容中的图像分析，Tomas Mikolov 的外貌特征描述如下：\n\n- 男性，面部朝向镜头，表情中性；\n- 头发较长，并束于脑后；\n- 身着深色上衣；\n- 背景模糊，呈现室内环境（可能为办公或摄影场景）。\n\n该描述来源于课程幻灯片中包含的一张人物肖像照片的分析结果。  \n[来源：3.1 词向量 2025.pptx, 幻灯片 25，图片 2 分析结果]"
+    }
+  ]
+}

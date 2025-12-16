@@ -149,6 +149,69 @@ class VectorStore:
         except Exception as e:
             print(f"❌ 添加文档到 ChromaDB 失败: {e}")
 
+
+    def add_documents_incremental(self, chunks: List[Dict[str, str]]) -> bool:
+        """增量添加文档到向量数据库
+
+        参数:
+            chunks: 文档块列表，每个块包含content和metadata
+
+        返回:
+            bool: 是否添加成功
+        """
+        if not chunks:
+            print("没有文档块需要添加")
+            return True
+
+        try:
+            # 获取现有文档数量，用于生成新ID
+            current_count = self.collection.count()
+
+            texts = [chunk['content'] for chunk in chunks]
+            metadatas = []
+            ids = []
+
+            # 批量获取embeddings（复用现有的get_embedding方法）
+            print(f"正在向量化 {len(texts)} 个新文档块...")
+            embeddings = []
+            for i, text in enumerate(texts):
+                if (i + 1) % 10 == 0:  # 每10个显示一次进度
+                    print(f"已处理 {i + 1}/{len(texts)} 个文档块")
+                embeddings.append(self.get_embedding(text))
+
+            # 准备metadata和IDs
+            for i, chunk in enumerate(chunks):
+                metadata = {
+                    "filename": chunk.get("filename", "unknown"),
+                    "filetype": chunk.get("filetype", ""),
+                    "page_number": chunk.get("page_number", 0),
+                    "chunk_id": chunk.get("chunk_id", i),
+                    "filepath": chunk.get("filepath", ""),
+                    "added_at": datetime.now().isoformat(),  # 标记添加时间
+                    "added_incrementally": True  # 标记为增量添加
+                }
+                metadatas.append(metadata)
+
+                # 生成唯一ID（避免与现有ID冲突）
+                unique_id = f"incremental_{current_count + i}_{uuid.uuid4().hex[:8]}"
+                ids.append(unique_id)
+
+            # 批量添加到ChromaDB（复用现有的collection操作）
+            print(f"正在添加到向量数据库...")
+            self.collection.add(
+                embeddings=embeddings,
+                documents=texts,
+                metadatas=metadatas,
+                ids=ids
+            )
+
+            print(f"✅ 增量添加成功：{len(ids)} 个文档块")
+            return True
+
+        except Exception as e:
+            print(f"❌ 增量添加失败: {e}")
+            return False
+
     def search_dense(self, query: str, top_k: int = TOP_K) -> List[Dict]:
         """搜索相关文档
 
