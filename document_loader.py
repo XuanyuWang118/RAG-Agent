@@ -332,3 +332,79 @@ class DocumentLoader:
                         documents.extend(doc_chunks)
 
         return documents
+
+    def process_uploaded_file(self, uploaded_file) -> List[Dict]:
+        """处理单个上传的文件（来自Streamlit），复用现有的load方法
+
+        参数:
+            uploaded_file: Streamlit上传的文件对象
+
+        返回:
+            处理后的文档块列表
+        """
+        try:
+            # 获取文件扩展名
+            file_name = uploaded_file.name
+            file_ext = os.path.splitext(file_name)[1].lower()
+
+            if file_ext not in self.supported_formats:
+                raise ValueError(f"不支持的文件格式: {file_ext}")
+
+            # 创建临时文件供现有方法使用
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_file_path = tmp_file.name
+
+            try:
+                # 复用现有的load方法
+                if file_ext == ".pdf":
+                    pages = self.load_pdf(tmp_file_path)
+                    # 转换格式以匹配期望的输出
+                    converted_pages = []
+                    for page in pages:
+                        converted_pages.append({
+                            "content": page["text"],
+                            "filename": file_name,
+                            "filepath": f"uploaded://{file_name}",
+                            "filetype": ".pdf",
+                            "page_number": page.get("page_number", 0),
+                            "images": page.get("images", [])
+                        })
+                    return converted_pages
+
+                elif file_ext == ".pptx":
+                    slides = self.load_pptx(tmp_file_path)
+                    # 转换格式
+                    converted_slides = []
+                    for slide in slides:
+                        converted_slides.append({
+                            "content": slide["text"],
+                            "filename": file_name,
+                            "filepath": f"uploaded://{file_name}",
+                            "filetype": ".pptx",
+                            "page_number": slide.get("page_number", 0),
+                            "images": slide.get("images", [])
+                        })
+                    return converted_slides
+
+                elif file_ext == ".docx":
+                    # DOCX文件直接返回文本内容
+                    text = self.load_docx(tmp_file_path)
+                    return [{"content": text, "filename": file_name, "filetype": file_ext, "page_number": 0}]
+
+                elif file_ext == ".txt":
+                    # TXT文件直接返回文本内容
+                    text = self.load_txt(tmp_file_path)
+                    return [{"content": text, "filename": file_name, "filetype": file_ext, "page_number": 0}]
+
+                else:
+                    raise ValueError(f"不支持的文件类型: {file_ext}")
+
+            finally:
+                # 清理临时文件
+                os.unlink(tmp_file_path)
+
+        except Exception as e:
+            print(f"处理上传文件失败 {uploaded_file.name}: {e}")
+            return []

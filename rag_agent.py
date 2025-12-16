@@ -1,5 +1,6 @@
 import json
 from typing import List, Dict, Optional, Tuple
+from datetime import datetime
 
 from openai import OpenAI
 
@@ -10,7 +11,9 @@ from config import (
     TOP_K,
 )
 from vector_store import VectorStore
-from tools import tool_manager
+from tools import ToolManager
+from image_processor import ImageProcessor
+from typing import Union
 
 
 class RAGAgent:
@@ -24,6 +27,12 @@ class RAGAgent:
 
         self.vector_store = VectorStore()
 
+        # 初始化图片处理器
+        self.image_processor = ImageProcessor()
+
+        # 初始化工具管理器（传递自身引用以支持出题工具）
+        self.tool_manager = ToolManager(rag_agent=self)
+
         """
         TODO: 实现并调整系统提示词，使其符合课程助教的角色和回答策略
         """
@@ -35,10 +44,24 @@ class RAGAgent:
         2. **补充联网搜索**：如果【课程内容】信息不足或没有相关内容，才使用联网搜索获取补充信息
         3. **直接回答**：对于不涉及课程知识的一般性问题（如时间、简单计算），直接回答无需追溯来源
 
+        **图片输入说明：**
+        - 当用户提交图片时，系统会先使用AI视觉模型分析图片内容，生成文字描述
+        - 图片描述会包含在查询中，帮助你更好地理解用户的问题
+        - 你应该将图片描述与课程内容相结合，提供准确、专业的解答
+
+        **智能出题功能：**
+        - 在适当的时机，你可以主动询问学生是否需要生成习题来巩固知识点
+        - 当学生表达学习需求或完成某个知识点讲解后，你可以建议："需要我为你生成一些练习题来巩固这个知识点吗？"
+        - 如果学生同意，你可以调用 `quiz_generation` 工具来生成相关习题
+        - 习题应该基于当前对话的主题，难度适中，有详细的解析说明
+        - 示例调用：quiz_generation(topic="词向量", difficulty="medium", question_type="multiple_choice", num_questions=3)
+        - 重要：调用工具后，题目会自动显示在用户界面中，你不需要在回复中重复包含题目内容
+        - 你的回复应该简洁地确认题目已生成，引导用户查看界面答题
+
         回答要求：
         1. **基于事实**：所有回答必须严格基于【课程内容】或者联网搜索中检索到的信息。
         2. **追溯来源**：在回答中使用课程内容时，必须在开头或末尾标注信息来源，格式为：[来源：文件名，页码 X 或 幻灯片 X] 或 [来源：文件名]（若无页码）。如果使用了联网搜索，标注为：[来源：网络搜索结果]。如果有多个来源，请合并或分别标注。
-        3. **无法回答**：如果【课程内容】和联网搜索中都找不到足够的信息来回答学生的问题，请告知学生："我无法根据当前课程材料回答这个问题，请参考相关教材或联系老师。"
+        3. **无法回答**：如果【课程内容】和联网搜索中都找不到足够的信息来回答学生的问题，请基于你自己的认知回答，并在最后告知学生："未寻找到相关课程材料，回答仅供参考，请查阅教材或者询问老师。"
         4. **语气专业**：保持助教的专业、友好和条理清晰的语气。
         """
 
@@ -124,7 +147,6 @@ class RAGAgent:
         【课程内容】
         {context}
 
-        【学生问题】
         {query}
 
         如果【课程内容】无法提供足够的信息，你可以选择使用提供的工具搜索网络信息、进行计算或获取当前时间。
@@ -144,7 +166,7 @@ class RAGAgent:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                tools=tool_manager.get_tool_definitions(),
+                tools=self.tool_manager.get_tool_definitions(),
                 tool_choice="auto",  # 让AI自动决定是否调用工具
                 temperature=0.7,
                 max_tokens=1500
@@ -184,18 +206,68 @@ class RAGAgent:
 
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
-            tool_args = json.loads(tool_call.function.arguments)
+
+            # 解析工具参数，增加错误处理
+            try:
+                if isinstance(tool_call.function.arguments, str):
+                    tool_args = json.loads(tool_call.function.arguments)
+                elif isinstance(tool_call.function.arguments, dict):
+                    tool_args = tool_call.function.arguments
+                else:
+                    tool_args = {}
+                    print(f"⚠️ 工具参数格式异常: {type(tool_call.function.arguments)}")
+            except json.JSONDecodeError as e:
+                print(f"❌ 解析工具参数失败: {e}")
+                tool_args = {}
 
             print(f"🔧 执行工具: {tool_name} 参数: {tool_args}")
 
             # 执行工具
-            tool_result = tool_manager.execute_tool(tool_name, tool_args)
+            tool_result = self.tool_manager.execute_tool(tool_name, tool_args)
+
+            # 特殊处理出题工具的结果
+            if tool_name == "quiz_generation" and isinstance(tool_result, dict) and "quiz_data" in tool_result:
+                # 将题目数据存储到session_state中
+                try:
+                    import streamlit as st
+                    if not hasattr(st.session_state, 'generated_quiz'):
+                        st.session_state.generated_quiz = []
+                    st.session_state.generated_quiz.append(tool_result["quiz_data"])
+                    print(f"📚 已将 {len(tool_result['quiz_data']['questions'])} 道题目存储到UI")
+
+                    # 同时保存习题生成记录到对话历史
+                    quiz_generation_record = {
+                        "role": "assistant",
+                        "content": f"🎯 已生成习题：{tool_result['quiz_data']['topic']} - {len(tool_result['quiz_data']['questions'])}道题目",
+                        "quiz_generation": {
+                            "topic": tool_result["quiz_data"]["topic"],
+                            "difficulty": tool_result["quiz_data"]["difficulty"],
+                            "question_type": tool_result["quiz_data"]["question_type"],
+                            "num_questions": len(tool_result["quiz_data"]["questions"]),
+                            "questions": tool_result["quiz_data"]["questions"],
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    }
+
+                    # 添加到对话历史
+                    if not hasattr(st.session_state, 'chat_history'):
+                        st.session_state.chat_history = []
+                    st.session_state.chat_history.append(quiz_generation_record)
+
+                except ImportError:
+                    # 非Streamlit环境，跳过UI更新
+                    pass
+
+                # 使用消息部分作为工具结果
+                tool_content = tool_result["message"]
+            else:
+                tool_content = tool_result
 
             # 格式化工具结果消息
             tool_result_message = {
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": tool_result
+                "content": tool_content
             }
 
             tool_results.append(tool_result_message)
@@ -223,6 +295,80 @@ class RAGAgent:
         answer = self.generate_response(query, context, chat_history)
 
         return answer
+
+    def answer_image_question(
+        self,
+        query: str,
+        image_base64: str,
+        chat_history: Optional[List[Dict]] = None,
+        top_k: int = TOP_K
+    ) -> str:
+        """回答包含图片的问题
+
+        参数:
+            query: 用户关于图片的问题
+            image_base64: 图片的Base64编码
+            chat_history: 对话历史
+            top_k: 检索文档数量
+
+        返回:
+            生成的回答
+        """
+        try:
+            # 1. 使用Qwen-VL分析图片，生成文字描述
+            print("🖼️ 正在分析图片...")
+            image_description = self._analyze_image_with_vl(image_base64)
+
+            if not image_description:
+                return "❌ 图片分析失败，请检查图片格式或重试。"
+
+            # 2. 将图片描述和用户问题合并，构造新的查询
+            enhanced_query = f"""
+【用户提交的图片分析结果】
+{image_description}
+
+【用户问题】
+{query}
+
+请基于用户提交的图片分析结果和相关课程资料，专业地回答用户的问题。
+"""
+
+            # 3. 使用RAG流程回答问题
+            print("🔍 正在检索相关课程内容...")
+            context, retrieved_docs = self.retrieve_context(enhanced_query, top_k=top_k)
+
+            if not context:
+                context = "（未检索到特别相关的课程材料）"
+
+            # 4. 生成最终回答
+            print("🤔 正在生成回答...")
+            answer = self.generate_response(enhanced_query, context, chat_history)
+
+            return answer
+
+        except Exception as e:
+            error_msg = f"图片问答处理失败: {str(e)}"
+            print(f"❌ {error_msg}")
+            return f"❌ {error_msg}"
+
+    def _analyze_image_with_vl(self, image_base64: str) -> str:
+        """使用Qwen-VL分析图片，返回文字描述"""
+        try:
+            # 直接使用image_processor的analyze_single_image方法
+            result = self.image_processor.analyze_single_image(image_base64, "用户上传图片")
+
+            # 提取纯描述内容（去掉格式化前缀）
+            if result.startswith("--- 用户上传图片 分析结果 ---"):
+                # 去掉格式化前缀，只保留分析结果
+                lines = result.strip().split('\n')
+                if len(lines) > 1:
+                    return '\n'.join(lines[1:]).strip()
+
+            return result.strip()
+
+        except Exception as e:
+            print(f"图片分析失败: {e}")
+            return None
 
     def chat(self) -> None:
         """交互式对话"""
