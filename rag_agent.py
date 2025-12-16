@@ -1,5 +1,5 @@
 import json
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 
 from openai import OpenAI
 
@@ -8,6 +8,8 @@ from config import (
     OPENAI_API_BASE,
     MODEL_NAME,
     TOP_K,
+    DEFAULT_RETRIEVAL_STRATEGY, 
+    ENABLE_ADVANCED_RAG,
 )
 from vector_store import VectorStore
 from tools import tool_manager
@@ -23,10 +25,10 @@ class RAGAgent:
         self.client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_API_BASE)
 
         self.vector_store = VectorStore()
+        
+        # 【新增】保存高级策略开关状态
+        self.enable_advanced_rag = ENABLE_ADVANCED_RAG 
 
-        """
-        TODO: 实现并调整系统提示词，使其符合课程助教的角色和回答策略
-        """
         self.system_prompt = """你是一位友好、严谨且专业的智能课程助教。
         你的任务是根据提供的【课程内容】来回答学生的问题。
 
@@ -42,25 +44,105 @@ class RAGAgent:
         4. **语气专业**：保持助教的专业、友好和条理清晰的语气。
         """
 
-    def retrieve_context(
-        self, query: str, top_k: int = TOP_K
-    ) -> Tuple[str, List[Dict]]:
-        """检索相关上下文
-        TODO: 实现检索相关上下文
-        要求：
-        1. 使用向量数据库检索相关文档
-        2. 格式化检索结果，构建上下文字符串
-        3. 每个检索结果需要包含来源信息（文件名和页码）
-        4. 返回格式化的上下文字符串和原始检索结果列表
+    def _construct_search_query(self, current_query: str, chat_history: Optional[List[Dict]] = None) -> str:
         """
-        # 1. 使用向量数据库检索相关文档
-        retrieved_docs = self.vector_store.search(query, top_k=top_k)
+        使用对话历史来提炼搜索关键词，提升多轮检索精度。
+        【逻辑修改】仅在 self.enable_advanced_rag 开启时，才执行多轮增强。
+        """
+        if not self.enable_advanced_rag:
+            return current_query
+            
+        if not chat_history or len(chat_history) < 2:
+            return current_query
         
-        # 2. 格式化检索结果，构建上下文字符串
+        # 提取最近的对话（例如，最近的问答对）
+        last_exchange = chat_history[-2:]
+        
+        # 构造用于 RAG 检索的最终查询
+        recent_context = f"最近的问题：{last_exchange[0]['content']}，最近的回答：{last_exchange[1]['content']}。"
+        return f"{recent_context} 学生的新问题是：{current_query}"
+
+    def _analyze_query_type(self, query: str) -> str:
+        """
+        使用 LLM 分析查询意图和类型，以决定最佳检索策略。
+        """
+        prompt = f"""分析以下用户查询的类型和意图，并严格以单字字符串形式返回最适合的检索策略。
+
+        1. 'HYBRID': 如果查询是模糊的、使用了代词（如“它”、“这个”）或同时包含关键词和概念，需要平衡语义和精确匹配。
+        2. 'BM25': 如果查询包含大量特定、罕见、技术性名词或ID，且明显是一个全新的、精确匹配的问题。
+        3. 'DENSE': 如果查询是关于定义、关系、比较或广义主题，需要深度语义理解。
+
+        查询: "{query}"
+
+        仅返回以下字符串之一: 'HYBRID', 'BM25', 'DENSE'
+        """
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=10
+            )
+            # 清理和规范化输出
+            return response.choices[0].message.content.strip().upper().replace('"', '')
+        except Exception:
+            # 失败时默认使用 config 中的策略
+            return DEFAULT_RETRIEVAL_STRATEGY
+
+    def retrieve_context(
+        self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K
+    ) -> Tuple[str, List[Dict]]:
+        """
+        【核心修改】实现检索策略分派器 (Strategy Dispatcher)。
+        新增逻辑：如果 self.enable_advanced_rag 为 False，则强制使用 DENSE 策略。
+        """
+        # 1. 构造用于检索的增强查询 (该函数内部会根据开关返回原始或增强查询)
+        search_query = self._construct_search_query(query, chat_history)
+
+        retrieved_docs = []
+        
+        # --- 策略决策开始 ---
+        if not self.enable_advanced_rag:
+            # 【退化逻辑】如果高级RAG开关关闭，强制退化到纯向量（DENSE）策略。
+            query_type = "DENSE"
+            print("⚙️ 高级RAG增强已关闭，强制退化到纯向量密集检索 (DENSE) 策略。")
+            
+        else:
+            # 启用高级策略：执行 LLM 策略分析
+            query_type = self._analyze_query_type(search_query)
+            print(f"⚙️ 高级RAG增强已启用 | LLM分析策略: {query_type}")
+
+        # 3. 策略分派器 (Dispatching logic based on query_type)
+        if query_type == 'DENSE':
+            # 概念主导或退化策略：纯向量检索
+            retrieved_docs = self.vector_store.search_dense(search_query, top_k=top_k)
+            print("➡️ 采用纯向量密集检索 (search_dense)")
+            
+        elif query_type == 'BM25':
+            # 关键词主导：纯稀疏检索
+            retrieved_docs = self.vector_store.search_bm25(search_query, top_k=top_k)
+            print("➡️ 采用纯 BM25 稀疏检索 (search_bm25)")
+
+        elif query_type == 'HYBRID': 
+            # 混合检索
+            retrieved_docs = self.vector_store.search(search_query, top_k=top_k)
+            print("➡️ 采用 RRF 混合检索 (search)")
+        
+        else:
+            # LLM分析失败时的兜底策略 (仅在高级模式下可能发生)
+            # 使用 config 中配置的 DEFAULT_RETRIEVAL_STRATEGY
+            if DEFAULT_RETRIEVAL_STRATEGY == "BM25":
+                 retrieved_docs = self.vector_store.search_bm25(search_query, top_k=top_k)
+            elif DEFAULT_RETRIEVAL_STRATEGY == "DENSE":
+                 retrieved_docs = self.vector_store.search_dense(search_query, top_k=top_k)
+            else:
+                 retrieved_docs = self.vector_store.search(search_query, top_k=top_k)
+            print(f"⚠️ LLM 分析失败，回退到 DEFAULT 策略: {DEFAULT_RETRIEVAL_STRATEGY}")
+            
+        # --- 策略决策结束 ---
+
+        # 4. 格式化检索结果，构建上下文字符串
         context_parts = []
-        
-        # 使用集合去重，避免重复引用相同的来源
-        source_set = set()
         
         for doc in retrieved_docs:
             content = doc["content"]
@@ -69,23 +151,21 @@ class RAGAgent:
             filename = metadata.get("filename", "未知文件")
             page_number = metadata.get("page_number", 0)
             
-            # 3. 每个检索结果需要包含来源信息（文件名和页码）
+            # 5. 每个检索结果需要包含来源信息（文件名和页码）
             if page_number and page_number > 0:
                 # 判断是页码 (PDF) 还是幻灯片 (PPTX)
                 source_label = "页码" if metadata.get("filetype") == ".pdf" else "幻灯片"
                 source_info = f"[来源：{filename}, {source_label} {page_number}]"
-                source_set.add(f"{filename}, {source_label} {page_number}")
             else:
                 # DOCX/TXT 或没有页码/幻灯片信息的文档
                 source_info = f"[来源：{filename}]"
-                source_set.add(filename)
                 
             # 将来源信息放在内容上方，用于 LLM 区分
             context_parts.append(f"{source_info}\n{content}\n---")
 
         context_string = "\n".join(context_parts)
         
-        # 4. 返回格式化的上下文字符串和原始检索结果列表
+        # 6. 返回格式化的上下文字符串和原始检索结果列表
         return context_string, retrieved_docs
 
     def generate_response(
@@ -94,26 +174,12 @@ class RAGAgent:
         context: str,
         chat_history: Optional[List[Dict]] = None,
     ) -> str:
-        """生成回答
-        
-        参数:
-            query: 用户问题
-            context: 检索到的上下文
-            chat_history: 对话历史
-        """
+        """生成回答"""
         messages = [{"role": "system", "content": self.system_prompt}]
 
         if chat_history:
             messages.extend(chat_history)
 
-        """
-        TODO: 实现用户提示词
-        要求：
-        1. 包含相关的课程内容
-        2. 包含学生问题
-        3. 包含来源信息（文件名和页码）
-        4. 返回用户提示词
-        """
         user_text = f"""
         请基于下面的【课程内容】来回答学生的问题。请严格遵循系统提示词中的所有要求。
 
@@ -132,20 +198,12 @@ class RAGAgent:
 
         messages.append({"role": "user", "content": user_text})
         
-        # 多模态接口示意（如需添加图片支持，可参考以下格式）：
-        # content_parts = [{"type": "text", "text": user_text}]
-        # content_parts.append({
-        #     "type": "image_url",
-        #     "image_url": {"url": f"data:image/png;base64,{base64_image}"}
-        # })
-        # messages.append({"role": "user", "content": content_parts})
-
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 tools=tool_manager.get_tool_definitions(),
-                tool_choice="auto",  # 让AI自动决定是否调用工具
+                tool_choice="auto",
                 temperature=0.7,
                 max_tokens=1500
             )
@@ -204,18 +262,11 @@ class RAGAgent:
 
     def answer_question(
         self, query: str, chat_history: Optional[List[Dict]] = None, top_k: int = TOP_K
-    ) -> Dict[str, any]:
-        """回答问题
+    ) -> str:
+        """回答问题"""
         
-        参数:
-            query: 用户问题
-            chat_history: 对话历史
-            top_k: 检索文档数量
-            
-        返回:
-            生成的回答
-        """
-        context, retrieved_docs = self.retrieve_context(query, top_k=top_k)
+        # 将 chat_history 传入 retrieve_context，实现多轮检索增强和策略分派
+        context, retrieved_docs = self.retrieve_context(query, chat_history=chat_history, top_k=top_k)
 
         if not context:
             context = "（未检索到特别相关的课程材料）"
@@ -228,6 +279,7 @@ class RAGAgent:
         """交互式对话"""
         print("=" * 60)
         print("欢迎使用智能课程助教系统！")
+        print("当前 RAG 策略模式:", "高级增强模式" if self.enable_advanced_rag else "纯向量基线模式 (DENSE)")
         print("=" * 60)
 
         chat_history = []
@@ -243,6 +295,7 @@ class RAGAgent:
 
                 print(f"\n助教: {answer}")
 
+                # 更新对话历史
                 chat_history.append({"role": "user", "content": query})
                 chat_history.append({"role": "assistant", "content": answer})
 

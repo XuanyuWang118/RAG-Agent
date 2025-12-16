@@ -17,3 +17,5 @@ requests>=2.31.0
 tavily-python>=0.7.0
 pdfplumber>=0.11.8
 streamlit>=1.28.0
+langchain-commnity>=0.4.1
+rank_bm25>=0.2.2
