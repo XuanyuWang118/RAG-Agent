@@ -15,6 +15,11 @@ DATA_DIR = "./data"
 VECTOR_DB_PATH = "./vector_db"
 COLLECTION_NAME = "NLP_Project_Collection"
 
+# 检索配置
+ENABLE_ADVANCED_RAG = True
+DEFAULT_RETRIEVAL_STRATEGY = "HYBRID"
+RRF_K = 60
+
 # 文本处理配置
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50

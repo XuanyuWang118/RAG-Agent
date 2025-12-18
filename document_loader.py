@@ -22,6 +22,7 @@ class DocumentLoader:
         self.supported_formats = [".pdf", ".pptx", ".docx", ".txt"]
         self.image_output_dir = image_output_dir
         os.makedirs(self.image_output_dir, exist_ok=True) # 确保图片输出目录存在
+<<<<<<< HEAD
 
     # def load_pdf(self, file_path: str) -> List[Dict]:
     #     """加载PDF文件，按页返回内容
@@ -77,6 +78,8 @@ class DocumentLoader:
     #     except Exception as e:
     #         print(f"加载PDF文件失败 {file_path}: {e}")
     #     return pages
+=======
+>>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
 
     def load_pdf(self, file_path: str) -> List[Dict]:
         """
