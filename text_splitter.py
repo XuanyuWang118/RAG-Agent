@@ -128,18 +128,35 @@ class TextSplitter:
             
             # PDF 和 PPTX 已经包含了文本化的图片信息，且我们仍然按页/幻灯片切分
             if filetype in [".pdf", ".pptx"]:
-                # PDF/PPTX 的 content 可能包含了图片分析文本
-                chunk_data = {
-                    "content": content, 
-                    "filename": doc.get("filename", "unknown"),
-                    "filepath": doc.get("filepath", ""),
-                    "filetype": filetype,
-                    "page_number": doc.get("page_number", 0),
-                    "chunk_id": 0,
-                    # 注意：此时的 images 字段仍然保留，但内容已体现在 content 中
-                    "images": doc.get("images", []), 
-                }
-                chunks_with_metadata.append(chunk_data)
+                # 检查内容长度，如果超过限制则进行二次切分
+                max_chars = 8000  # 与embedding API限制保持一致
+                if len(content) > max_chars:
+                    print(f"PDF/PPTX内容过长 ({len(content)} 字符)，进行二次切分: {doc.get('filename')} 页{doc.get('page_number')}")
+                    sub_chunks = self.split_text(content)
+                    for j, sub_chunk in enumerate(sub_chunks):
+                        chunk_data = {
+                            "content": sub_chunk,
+                            "filename": doc.get("filename", "unknown"),
+                            "filepath": doc.get("filepath", ""),
+                            "filetype": filetype,
+                            "page_number": doc.get("page_number", 0),
+                            "chunk_id": j + 1,  # 从1开始，表示这是第几个子块
+                            # 注意：此时的 images 字段仍然保留，但内容已体现在 content 中
+                            "images": doc.get("images", []),
+                        }
+                        chunks_with_metadata.append(chunk_data)
+                else:
+                    chunk_data = {
+                        "content": content,
+                        "filename": doc.get("filename", "unknown"),
+                        "filepath": doc.get("filepath", ""),
+                        "filetype": filetype,
+                        "page_number": doc.get("page_number", 0),
+                        "chunk_id": 0,
+                        # 注意：此时的 images 字段仍然保留，但内容已体现在 content 中
+                        "images": doc.get("images", []),
+                    }
+                    chunks_with_metadata.append(chunk_data)
 
             elif filetype in [".docx", ".txt"]:
                 # DOCX/TXT 进行二次文本切分

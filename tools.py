@@ -9,7 +9,7 @@ try:
 except ImportError:
     TavilyClient = None
 
-from config import TAVILY_API_KEY, OPENAI_API_KEY, OPENAI_API_BASE, MODEL_NAME
+from config import TAVILY_API_KEY, OPENAI_API_KEY, OPENAI_API_BASE, MODEL_NAME, TOP_K
 
 if TYPE_CHECKING:
     from rag_agent import RAGAgent
@@ -316,7 +316,7 @@ class QuizGenerationTool:
             try:
                 context_string, retrieved_docs = self.rag_agent.retrieve_context(
                     query=f"{topic} 相关概念和知识点",
-                    top_k=5
+                    top_k=TOP_K
                 )
                 print(f"📖 上下文检索完成，context_string长度: {len(context_string)}, retrieved_docs长度: {len(retrieved_docs)}")
 

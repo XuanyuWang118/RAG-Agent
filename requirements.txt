@@ -16,10 +16,6 @@ pytesseract>=0.3.10
 requests>=2.31.0
 tavily-python>=0.7.0
 pdfplumber>=0.11.8
-<<<<<<< HEAD
-streamlit>=1.28.0
-=======
 streamlit>=1.28.0
 langchain-commnity>=0.4.1
 rank_bm25>=0.2.2
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63

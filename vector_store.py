@@ -1,15 +1,9 @@
 import os
-<<<<<<< HEAD
-import uuid
-from datetime import datetime
-from typing import List, Dict
-=======
 import joblib
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from tqdm import tqdm
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
 
 import chromadb
 from chromadb.config import Settings
@@ -81,6 +75,13 @@ class VectorStore:
 
         """
         try:
+            # 检查文本长度，避免超过API限制
+            # OpenAI embedding模型的字符限制大约是8000字符
+            max_chars = 8000
+            if len(text) > max_chars:
+                print(f"文本过长 ({len(text)} 字符)，截断至 {max_chars} 字符")
+                text = text[:max_chars]
+
             # 调用 OpenAI API 获取 embedding
             response = self.client.embeddings.create(
                 model=OPENAI_EMBEDDING_MODEL,
@@ -138,11 +139,20 @@ class VectorStore:
         # 批量获取 Embedding
         print("正在批量获取 Embedding 向量...")
         embeddings = []
-        for text in tqdm(texts, desc="获取向量"):
-            embeddings.append(self.get_embedding(text))
-        
-        # 准备 ChromaDB 数据和 LangChain Document 列表
-        for i, chunk in enumerate(chunks):
+        valid_indices = []  # 记录有效的embedding索引
+
+        for i, text in enumerate(tqdm(texts, desc="获取向量")):
+            embedding = self.get_embedding(text)
+            embeddings.append(embedding)
+            # 只保留有有效embedding的文档
+            if embedding:  # 非空列表
+                valid_indices.append(i)
+
+        print(f"成功获取 {len(valid_indices)}/{len(embeddings)} 个有效embedding")
+
+        # 只处理有有效embedding的文档
+        for i in valid_indices:
+            chunk = chunks[i]
             # 获取文档块元数据
             metadata = {
                 "filename": chunk.get("filename"),
@@ -156,10 +166,13 @@ class VectorStore:
             # 使用文件名、页码、块ID组合生成唯一ID
             unique_id = f"{chunk.get('filename')}_{chunk.get('page_number')}_{chunk.get('chunk_id')}_{i}"
             ids.append(unique_id)
-            
+
             # 创建 LangChain Document 对象 (用于 BM25)
             lc_doc = Document(page_content=chunk['content'], metadata=metadata)
             lc_documents.append(lc_doc)
+
+        # 过滤embeddings，只保留有效的
+        embeddings = [embeddings[i] for i in valid_indices]
 
 
         # 批量添加文档块到 ChromaDB
@@ -403,68 +416,6 @@ class VectorStore:
             name=self.collection_name, metadata={"description": "课程向量数据库"}
         )
         print("向量数据库已清空")
-
-    def add_documents_incremental(self, chunks: List[Dict[str, str]]) -> bool:
-        """增量添加文档到向量数据库
-
-        参数:
-            chunks: 文档块列表，每个块包含content和metadata
-
-        返回:
-            bool: 是否添加成功
-        """
-        if not chunks:
-            print("没有文档块需要添加")
-            return True
-
-        try:
-            # 获取现有文档数量，用于生成新ID
-            current_count = self.collection.count()
-
-            texts = [chunk['content'] for chunk in chunks]
-            metadatas = []
-            ids = []
-
-            # 批量获取embeddings（复用现有的get_embedding方法）
-            print(f"正在向量化 {len(texts)} 个新文档块...")
-            embeddings = []
-            for i, text in enumerate(texts):
-                if (i + 1) % 10 == 0:  # 每10个显示一次进度
-                    print(f"已处理 {i + 1}/{len(texts)} 个文档块")
-                embeddings.append(self.get_embedding(text))
-
-            # 准备metadata和IDs
-            for i, chunk in enumerate(chunks):
-                metadata = {
-                    "filename": chunk.get("filename", "unknown"),
-                    "filetype": chunk.get("filetype", ""),
-                    "page_number": chunk.get("page_number", 0),
-                    "chunk_id": chunk.get("chunk_id", i),
-                    "filepath": chunk.get("filepath", ""),
-                    "added_at": datetime.now().isoformat(),  # 标记添加时间
-                    "added_incrementally": True  # 标记为增量添加
-                }
-                metadatas.append(metadata)
-
-                # 生成唯一ID（避免与现有ID冲突）
-                unique_id = f"incremental_{current_count + i}_{uuid.uuid4().hex[:8]}"
-                ids.append(unique_id)
-
-            # 批量添加到ChromaDB（复用现有的collection操作）
-            print(f"正在添加到向量数据库...")
-            self.collection.add(
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadatas,
-                ids=ids
-            )
-
-            print(f"✅ 增量添加成功：{len(ids)} 个文档块")
-            return True
-
-        except Exception as e:
-            print(f"❌ 增量添加失败: {e}")
-            return False
 
     def get_collection_count(self) -> int:
         """获取collection中的文档数量"""

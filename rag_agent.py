@@ -1,9 +1,5 @@
 import json
-<<<<<<< HEAD
-from typing import List, Dict, Optional, Tuple
-=======
 from typing import List, Dict, Optional, Tuple, Union
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
 from datetime import datetime
 
 from openai import OpenAI
@@ -19,10 +15,6 @@ from config import (
 from vector_store import VectorStore
 from tools import ToolManager
 from image_processor import ImageProcessor
-<<<<<<< HEAD
-from typing import Union
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
 
 
 class RAGAgent:
@@ -43,18 +35,6 @@ class RAGAgent:
         # 【新增】保存策略开关状态
         self.enable_advanced_rag = ENABLE_ADVANCED_RAG
 
-<<<<<<< HEAD
-        # 初始化图片处理器
-        self.image_processor = ImageProcessor()
-
-        # 初始化工具管理器（传递自身引用以支持出题工具）
-        self.tool_manager = ToolManager(rag_agent=self)
-
-        """
-        TODO: 实现并调整系统提示词，使其符合课程助教的角色和回答策略
-        """
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
         self.system_prompt = """你是一位友好、严谨且专业的智能课程助教。
         你的任务是根据提供的【课程内容】来回答学生的问题。
 
@@ -72,10 +52,6 @@ class RAGAgent:
         - 在适当的时机，你可以主动询问学生是否需要生成习题来巩固知识点
         - 当学生表达学习需求或完成某个知识点讲解后，你可以建议："需要我为你生成一些练习题来巩固这个知识点吗？"
         - 如果学生同意，你可以调用 `quiz_generation` 工具来生成相关习题
-<<<<<<< HEAD
-        - 习题应该基于当前对话的主题，难度适中，有详细的解析说明
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
         - 示例调用：quiz_generation(topic="词向量", difficulty="medium", question_type="multiple_choice", num_questions=3)
         - 重要：调用工具后，题目会自动显示在用户界面中，你不需要在回复中重复包含题目内容
         - 你的回复应该简洁地确认题目已生成，引导用户查看界面答题
@@ -329,37 +305,20 @@ class RAGAgent:
                 model=self.model,
                 messages=messages,
                 tools=self.tool_manager.get_tool_definitions(),
-<<<<<<< HEAD
-                tool_choice="auto",  # 让AI自动决定是否调用工具
-=======
                 tool_choice="auto",
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 temperature=0.7,
                 max_tokens=1500
             )
 
             response_message = response.choices[0].message
 
-<<<<<<< HEAD
-            # 检查是否有工具调用
-            if response_message.tool_calls:
-                # 执行工具调用
-                tool_results = self._execute_tool_calls(response_message.tool_calls)
-
-                # 将工具调用结果添加到消息历史
-=======
             if response_message.tool_calls:
                 tool_results = self._execute_tool_calls(response_message.tool_calls)
 
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 messages.append(response_message)
                 for tool_result in tool_results:
                     messages.append(tool_result)
 
-<<<<<<< HEAD
-                # 第二次调用：基于工具结果生成最终回答
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 final_response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -369,30 +328,18 @@ class RAGAgent:
 
                 return final_response.choices[0].message.content
             else:
-<<<<<<< HEAD
-                # 没有工具调用，直接返回结果
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 return response_message.content
 
         except Exception as e:
             return f"生成回答时出错: {str(e)}"
 
     def _execute_tool_calls(self, tool_calls) -> List[Dict]:
-<<<<<<< HEAD
-        """执行工具调用并返回结果"""
-=======
         """执行工具调用并返回结果 (保持原逻辑不变)"""
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
         tool_results = []
 
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
 
-<<<<<<< HEAD
-            # 解析工具参数，增加错误处理
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
             try:
                 if isinstance(tool_call.function.arguments, str):
                     tool_args = json.loads(tool_call.function.arguments)
@@ -407,18 +354,9 @@ class RAGAgent:
 
             print(f"🔧 执行工具: {tool_name} 参数: {tool_args}")
 
-<<<<<<< HEAD
-            # 执行工具
-            tool_result = self.tool_manager.execute_tool(tool_name, tool_args)
-
-            # 特殊处理出题工具的结果
-            if tool_name == "quiz_generation" and isinstance(tool_result, dict) and "quiz_data" in tool_result:
-                # 将题目数据存储到session_state中
-=======
             tool_result = self.tool_manager.execute_tool(tool_name, tool_args)
 
             if tool_name == "quiz_generation" and isinstance(tool_result, dict) and "quiz_data" in tool_result:
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 try:
                     import streamlit as st
                     if not hasattr(st.session_state, 'generated_quiz'):
@@ -426,10 +364,6 @@ class RAGAgent:
                     st.session_state.generated_quiz.append(tool_result["quiz_data"])
                     print(f"📚 已将 {len(tool_result['quiz_data']['questions'])} 道题目存储到UI")
 
-<<<<<<< HEAD
-                    # 同时保存习题生成记录到对话历史
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                     quiz_generation_record = {
                         "role": "assistant",
                         "content": f"🎯 已生成习题：{tool_result['quiz_data']['topic']} - {len(tool_result['quiz_data']['questions'])}道题目",
@@ -443,32 +377,17 @@ class RAGAgent:
                         }
                     }
 
-<<<<<<< HEAD
-                    # 添加到对话历史
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                     if not hasattr(st.session_state, 'chat_history'):
                         st.session_state.chat_history = []
                     st.session_state.chat_history.append(quiz_generation_record)
 
                 except ImportError:
-<<<<<<< HEAD
-                    # 非Streamlit环境，跳过UI更新
                     pass
 
-                # 使用消息部分作为工具结果
-=======
-                    pass
-
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 tool_content = tool_result["message"]
             else:
                 tool_content = tool_result
 
-<<<<<<< HEAD
-            # 格式化工具结果消息
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
             tool_result_message = {
                 "role": "tool",
                 "tool_call_id": tool_call.id,
@@ -501,21 +420,7 @@ class RAGAgent:
         chat_history: Optional[List[Dict]] = None,
         top_k: int = TOP_K
     ) -> str:
-<<<<<<< HEAD
-        """回答包含图片的问题
-
-        参数:
-            query: 用户关于图片的问题
-            image_base64: 图片的Base64编码
-            chat_history: 对话历史
-            top_k: 检索文档数量
-
-        返回:
-            生成的回答
-        """
-=======
         """回答包含图片的问题"""
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
         try:
             # 1. 使用Qwen-VL分析图片，生成文字描述
             print("🖼️ 正在分析图片...")
@@ -526,20 +431,6 @@ class RAGAgent:
 
             # 2. 将图片描述和用户问题合并，构造新的查询
             enhanced_query = f"""
-<<<<<<< HEAD
-【用户提交的图片分析结果】
-{image_description}
-
-【用户问题】
-{query}
-
-请基于用户提交的图片分析结果和相关课程资料，专业地回答用户的问题。
-"""
-
-            # 3. 使用RAG流程回答问题
-            print("🔍 正在检索相关课程内容...")
-            context, retrieved_docs = self.retrieve_context(enhanced_query, top_k=top_k)
-=======
             【用户提交的图片分析结果】
             {image_description}
 
@@ -553,7 +444,6 @@ class RAGAgent:
             print("🔍 正在检索相关课程内容...")
             # 【修改】传入 chat_history 以支持多轮检索增强和策略分派
             context, retrieved_docs = self.retrieve_context(enhanced_query, chat_history=chat_history, top_k=top_k)
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
 
             if not context:
                 context = "（未检索到特别相关的课程材料）"
@@ -570,22 +460,11 @@ class RAGAgent:
             return f"❌ {error_msg}"
 
     def _analyze_image_with_vl(self, image_base64: str) -> str:
-<<<<<<< HEAD
-        """使用Qwen-VL分析图片，返回文字描述"""
-        try:
-            # 直接使用image_processor的analyze_single_image方法
-            result = self.image_processor.analyze_single_image(image_base64, "用户上传图片")
-
-            # 提取纯描述内容（去掉格式化前缀）
-            if result.startswith("--- 用户上传图片 分析结果 ---"):
-                # 去掉格式化前缀，只保留分析结果
-=======
         """使用Qwen-VL分析图片，返回文字描述 (保持原逻辑不变)"""
         try:
             result = self.image_processor.analyze_single_image(image_base64, "用户上传图片")
 
             if result.startswith("--- 用户上传图片 分析结果 ---"):
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
                 lines = result.strip().split('\n')
                 if len(lines) > 1:
                     return '\n'.join(lines[1:]).strip()

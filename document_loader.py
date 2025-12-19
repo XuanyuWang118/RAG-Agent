@@ -22,65 +22,7 @@ class DocumentLoader:
         self.supported_formats = [".pdf", ".pptx", ".docx", ".txt"]
         self.image_output_dir = image_output_dir
         os.makedirs(self.image_output_dir, exist_ok=True) # 确保图片输出目录存在
-<<<<<<< HEAD
-
-    # def load_pdf(self, file_path: str) -> List[Dict]:
-    #     """加载PDF文件，按页返回内容
-
-    #     TODO: 实现PDF文件加载
-    #     要求：
-    #     1. 使用PdfReader读取PDF文件
-    #     2. 遍历每一页，提取文本内容
-    #     3. 格式化为"--- 第 X 页 ---\n文本内容\n"
-    #     4. 返回pdf内容列表，每个元素包含 {"text": "..."}
-    #     """
-    #     pages = []
-    #     try:
-    #         # 使用 pdfplumber 读取PDF文件
-    #         with pdfplumber.open(file_path) as pdf:
-    #             num_pages = len(pdf.pages)
-    #             filename_base = os.path.basename(file_path).replace(os.path.splitext(file_path)[1], "")
-                
-    #             for i, page in enumerate(pdf.pages):
-    #                 # 提取文本
-    #                 text = page.extract_text() or ""
-                    
-    #                 # 提取图片信息
-    #                 image_info = []
-    #                 for image_data in page.images:
-    #                     # 尝试从 page.images 中提取图像对象
-    #                     try:
-    #                         # get_objid() 是一个内部方法，这里我们直接尝试提取原始图像数据
-    #                         img = page.crop((image_data['x0'], image_data['y0'], image_data['x1'], image_data['y1']))
-                            
-    #                         # 获取图片二进制数据
-    #                         img_bytes = img.to_image().original.tobytes() 
-    #                         img_format = img.to_image().original.format 
-                            
-    #                         # 确定图片保存路径和文件名
-    #                         img_filename = f"{filename_base}_p{i+1}_{image_data['name']}.{img_format or 'png'}"
-    #                         img_save_path = os.path.join(self.image_output_dir, img_filename)
-                            
-    #                         # 使用PIL保存图片
-    #                         Image.open(io.BytesIO(img_bytes)).save(img_save_path)
-
-    #                         image_info.append({"path": img_save_path, "bbox": [image_data['x0'], image_data['y0']]})
-    #                     except Exception as img_e:
-    #                         # 很多 PDF 对象会被错误识别为图片，这里捕获异常并跳过
-    #                         continue
-
-    #                 formatted_text = f"--- 第 {i + 1} 页 ---\n{text.strip()}\n"
-                    
-    #                 pages.append({
-    #                     "text": formatted_text,
-    #                     "images": image_info  # 新增图片信息字段
-    #                 })
-    #     except Exception as e:
-    #         print(f"加载PDF文件失败 {file_path}: {e}")
-    #     return pages
-=======
->>>>>>> 4ce53f2541db68d46cfaf9419f0cd50b06b35b63
-
+        
     def load_pdf(self, file_path: str) -> List[Dict]:
         """
         加载PDF文件，按页返回内容，并使用 PyMuPDF 提取图片和保存到本地。

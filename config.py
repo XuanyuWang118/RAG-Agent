@@ -1,9 +1,9 @@
 #API配置
 OPENAI_API_KEY = "sk-e6dcc423c4cd497c92fe6b26047b119d"
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MODEL_NAME = "qwen3-max"
+MODEL_NAME = "qwen3-max-2025-09-23"
 OPENAI_EMBEDDING_MODEL = "text-embedding-v4"
-OPENAI_VL_MODEL = "qwen3-vl-plus"
+OPENAI_VL_MODEL = "qwen3-vl-flash"
 
 # Tavily搜索API配置
 TAVILY_API_KEY = "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"
@@ -26,4 +26,4 @@ CHUNK_OVERLAP = 50
 MAX_TOKENS = 1500
 
 # RAG配置
-TOP_K = 5
+TOP_K = 20

@@ -1,0 +1,25 @@
+{
+  "id": "d29de42e-8b57-4d40-85ab-8ea7c27dd11a",
+  "title": "介绍一下课本中Tomas Mikolov的外貌",
+  "timestamp": "2025-12-19T15:24:55.094960",
+  "messages": [
+    {
+      "role": "user",
+      "content": "介绍一下课本中Tomas Mikolov的外貌",
+      "has_image": false
+    },
+    {
+      "role": "assistant",
+      "content": "根据课程内容中的图片2（3.1 词向量 2025_s25_Picture 2.jpg）分析结果，该图像是一张男性人物肖像，具有以下特征：\n\n- 中长发，部分向后梳理，露出额头；\n- 发色为深棕色或黑色；\n- 身穿深色（可能为黑色）上衣；\n- 背景为浅色调、略显模糊的室内环境；\n- 表情平静，面部正对镜头。\n\n虽然该图片出现在介绍“词向量的提出者 Tomas Mikolov”的幻灯片（幻灯片25）中，**但课程材料本身并未明确标注该肖像就是 Tomas Mikolov**。不过，结合上下文（幻灯片25标题为“词向量的提出者”，且所附论文作者为 Tomas Mikolov 等人），可以合理推断该照片即为 Tomas Mikolov。\n\n此外，网络搜索结果也确认 Tomas Mikolov 是捷克计算机科学家，曾就职于 Google 和 Facebook AI，目前任职于捷克理工大学（CIIRC）。公开照片显示他确实具有典型的中欧人外貌特征，与课程图片描述一致 [来源：网络搜索结果]。\n\n综上所述，**课本中（即课程PPT幻灯片25所附图片）展示的 Tomas Mikolov 外貌为：中长深色头发、穿深色上衣、表情平静的男性**。[来源：3.1 词向量 2025.pptx, 幻灯片 25；图片2分析结果；网络搜索结果]\n\n需要我为你生成一些练习题来巩固这个知识点吗？"
+    },
+    {
+      "role": "user",
+      "content": "课本中提到了他写了哪篇论文？",
+      "has_image": false
+    },
+    {
+      "role": "assistant",
+      "content": "根据【课程内容】，课本（即课件《3.1 词向量 2025.pptx》）中明确提到了 Tomas Mikolov 参与撰写的两篇论文，具体如下：\n\n1. **《Efficient Estimation of Word Representations in Vector Space》**  \n   - 作者：Tomas Mikolov, Greg Corrado, Kai Chen, Jeffrey Dean  \n   - 所有作者均来自 Google Inc., Mountain View, CA  \n   - 该论文聚焦于在向量空间中高效估计词表示的方法，是 Word2Vec 模型的重要基础之一。  \n   [来源：3.1 词向量 2025.pptx, 幻灯片 25；图片1分析结果]\n\n2. **《Distributed Representations of Words and Phrases and their Compositionality》**  \n   - 作者：Tomas Mikolov, Ilya Sutskever, Kai Chen, Greg Corrado, Jeffrey Dean  \n   - 同样全部来自 Google Inc., Mountain View  \n   - 该论文进一步探讨了词与短语的分布式表示及其组合性（compositionality），也是 Word2Vec 系列工作中的核心文献。  \n   [来源：3.1 词向量 2025.pptx, 幻灯片 25；图片3分析结果]\n\n这两篇论文均发表于2013年左右，是自然语言处理领域词嵌入技术（尤其是 Word2Vec）的奠基性工作。\n\n因此，**课本中提到 Tomas Mikolov 撰写的论文包括上述两篇**。[来源：3.1 词向量 2025.pptx, 幻灯片 25]"
+    }
+  ]
+}

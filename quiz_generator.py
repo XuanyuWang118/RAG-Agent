@@ -6,6 +6,7 @@
 import json
 from typing import List, Dict, Any, Optional
 from rag_agent import RAGAgent
+from config import TOP_K
 
 
 class QuizGenerator:
@@ -92,7 +93,7 @@ class QuizGenerator:
         """
         try:
             # 首先检索相关课程内容作为上下文
-            context_docs = self.rag_agent.retrieve_context(f"{topic} 相关知识", top_k=5)
+            context_docs = self.rag_agent.retrieve_context(f"{topic} 相关知识", top_k=TOP_K)
             context_text = "\n".join([doc.get("content", "") for doc in context_docs])
 
             quiz_prompt = f"""
